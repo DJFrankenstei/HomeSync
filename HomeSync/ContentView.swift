@@ -109,6 +109,7 @@ struct ContentView: View {
                     }
                 }
             }
+
             .alert("It looks like someone is at your door!", isPresented: $detected) {
                 Button("Alr") {
                     
