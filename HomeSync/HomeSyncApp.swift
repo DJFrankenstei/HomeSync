@@ -14,6 +14,8 @@ struct HomeSyncApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(blemanager)
+                .preferredColorScheme(.dark)
+                
         }
     }
 }

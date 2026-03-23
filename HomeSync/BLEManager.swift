@@ -7,8 +7,8 @@
 
 
 import SwiftUI
-import Foundation
 import Combine
+import Foundation
 import CoreBluetooth
 
 class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
@@ -59,6 +59,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         let dataToSend = Data(data.utf8)
         peripheral.writeValue(dataToSend, for: characteristic, type: .withResponse)
     }
+    
     
     // MARK: - Central Delegate
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
@@ -123,4 +124,3 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         }
     }
 }
-
