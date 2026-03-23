@@ -120,7 +120,10 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     func peripheral(_ peripheral: CBPeripheral,
                     didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
-        
-        received = characteristic.value
+        guard error == nil, let data = characteristic.value else { return }
+
+                // Force the @Published to update even if it's the same data
+                received = nil
+                received = data
     }
 }
