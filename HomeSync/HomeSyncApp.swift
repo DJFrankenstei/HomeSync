@@ -1,17 +1,22 @@
 //
-//  HomeSyncApp.swift
+//  ContentView.swift
 //  HomeSync
 //
-//  Created by OneLeaf on 23/03/26.
+//  Created by Samarth Bhate on 18/03/26.
 //
 
 import SwiftUI
 
 @main
 struct HomeSyncApp: App {
+    @StateObject var blemanager = BLEManager()
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(blemanager)
         }
     }
 }
+
+
+
