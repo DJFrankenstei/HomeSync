@@ -28,6 +28,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         }
     }
     
+    @Published var received: Data?
+    
     var targetCharacteristic: CBCharacteristic?
     
     override init() {
@@ -110,6 +112,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             if characteristic.uuid.uuidString == "FFE1" {
                 targetCharacteristic = characteristic
                 peripheral.setNotifyValue(true, for: characteristic)
+                
             }
         }
     }
@@ -118,9 +121,6 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                     didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
         
-        if let data = characteristic.value,
-           let string = String(data: data, encoding: .utf8) {
-            print("Received:", string)
-        }
+        received = characteristic.value
     }
 }

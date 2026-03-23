@@ -30,6 +30,8 @@ struct ContentView: View {
     
    @State private var showSettings = false
     
+    @State private var detected = false
+    
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     
     var body: some View {
@@ -93,6 +95,18 @@ struct ContentView: View {
                     
                     Text("Unsupported Size Class!")
                         .font(.system(size: 36, weight: .heavy, design: .rounded))
+                }
+            }
+            .onChange(of: bleManager.received) { oldValue, newValue in
+                if let new = newValue {
+                    if let received = String(data: new, encoding: .utf8) {
+                        if Int(received) != nil && Int(received)! == 0 {
+                            detected = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                detected = false
+                            }
+                        }
+                    }
                 }
             }
         
