@@ -15,6 +15,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     
     var centralManager: CBCentralManager!
     
+    @Published var receiveBuffer = ""
+    
     @Published var peripherals: [CBPeripheral] = [] {
         didSet {
             
@@ -121,9 +123,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                     didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
         guard error == nil, let data = characteristic.value else { return }
-
-                // Force the @Published to update even if it's the same data
-                received = nil
-                received = data
+        received = data
+        
     }
 }
