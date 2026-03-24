@@ -33,22 +33,21 @@ void setup() {
 void loop() {
   int val = readBT();
 
-  
+ 
 
   if (val != -1) {
     Serial.println(val);
     if (val == 3) {
-      toggleStream();
+      streamOpen = !streamOpen;
       Serial.println("toggled stream");
-      Serial.println(streamOpen);
-    }
-
-    relayState[val] = !relayState[val]; // TOGGLE
-
-    if (relayState[val]) {
-      digitalWrite(val + 2, LOW);
     } else {
-      digitalWrite(val + 2, HIGH);
+      relayState[val] = !relayState[val]; // TOGGLE
+  
+      if (relayState[val]) {
+        digitalWrite(val + 2, LOW);
+      } else {
+        digitalWrite(val + 2, HIGH);
+      }
     }
   }
 
