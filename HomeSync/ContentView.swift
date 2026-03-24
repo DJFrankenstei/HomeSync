@@ -82,6 +82,30 @@ struct ContentView: View {
                 .onAppear {
                     showSettings.toggle()
                 }
+                .onChange(of: bleManager.received) { _, newValue in
+                    
+                    guard let data = newValue else { return }
+                    
+                    let byteArray = Array(data)
+                    
+                    
+                    
+                    print()
+                    
+                    
+                    
+                    if String(byteArray.first!) == "1" || String(byteArray.first!) == "0" {
+                        detected = true
+                        
+                    } else {
+                        
+                    }
+                }
+                .alert("Someone at yo door", isPresented: $detected) {
+                    Button("Alr") {
+                        detected = false
+                    }
+                }
                 
             }
             
@@ -97,24 +121,7 @@ struct ContentView: View {
                         .font(.system(size: 36, weight: .heavy, design: .rounded))
                 }
             }
-            .onChange(of: bleManager.received) { oldValue, newValue in
-                if let new = newValue {
-                    if let received = String(data: new, encoding: .utf8) {
-                        if Int(received) != nil && Int(received)! == 0 {
-                            detected = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                detected = false
-                            }
-                        }
-                    }
-                }
-            }
-
-            .alert("It looks like someone is at your door!", isPresented: $detected) {
-                Button("Alr") {
-                    
-                }
-            }
+            
         
         }
     }
@@ -125,3 +132,13 @@ struct ContentView: View {
 }
 
 
+extension String {
+    func literalized() -> String {
+        return self
+            .replacingOccurrences(of: "\\", with: "\\\\") // Escape backslashes first
+            .replacingOccurrences(of: "\n", with: "\\n")  // Replace newline with literal \n
+            .replacingOccurrences(of: "\r", with: "\\r")  // Replace carriage return with literal \r
+            .replacingOccurrences(of: "\t", with: "\\t")  // Optionally replace tab
+             // Optionally replace quotes
+    }
+}
