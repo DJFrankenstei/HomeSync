@@ -10,6 +10,10 @@ int echoPin = 7;
 
 int idx = 0;
 
+unsigned long lastSend = 0;
+
+bool streamOpen = false;
+
 
 void setup() {
   Serial.begin(9600);
@@ -27,6 +31,49 @@ void setup() {
 }
 
 void loop() {
+  int val = readBT();
+
+  
+
+  if (val != -1) {
+    Serial.println(val);
+    if (val == 3) {
+      toggleStream();
+      Serial.println("toggled stream");
+      Serial.println(streamOpen);
+    }
+
+    relayState[val] = !relayState[val]; // TOGGLE
+
+    if (relayState[val]) {
+      digitalWrite(val + 2, LOW);
+    } else {
+      digitalWrite(val + 2, HIGH);
+    }
+  }
+
+  if ((motionDetected() && getCm() < 20) && !streamOpen) {
+    Serial.println(getCm());
+    
+    
+    int toSend = idx % 2;
+
+    idx++;
+
+    BT.write(toSend);
+  }
+
+  unsigned long now = millis();
+  if (streamOpen && now - lastSend > 200) {  // send every 200ms
+        lastSend = now;
+        String distance = String(getCm());
+        String motion = motionDetected() ? "true" : "false";
+        String stream = distance + ";" + motion;
+
+        Serial.println(stream);
+        BT.print(stream);
+  }
+
   if (Serial.available() > 0) {
     int incoming = Serial.read();
 
@@ -37,34 +84,14 @@ void loop() {
       idx++;
 
       Serial.println(toSend);
-      BT.write(toSend);
+   //   BT.write(toSend);
     }
     
   }
 
+  
 
-  int val = readBT();
-
-  if (val != -1) {
-    relayState[val] = !relayState[val]; // TOGGLE
-
-    if (relayState[val]) {
-      digitalWrite(val + 2, LOW);
-    } else {
-      digitalWrite(val + 2, HIGH);
-    }
-  }
-
-  if (motionDetected() && getCm() < 20) {
-    Serial.println(getCm());
-    
-    
-    int toSend = idx % 2;
-
-    idx++;
-
-    BT.write(toSend);
-  }
+  
 }
 
 bool motionDetected() {
@@ -91,9 +118,13 @@ int readBT() {
     char c = BT.read();
     int num = c - '0';
 
-    if (num >= 0 && num < numRelays) {
+    if (num >= 0 && num < numRelays + 1) {
       return num;
     }
   }
   return -1;
+}
+
+void toggleStream() {
+  streamOpen = !streamOpen;
 }
