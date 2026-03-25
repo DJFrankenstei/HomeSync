@@ -3,29 +3,51 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-SoftwareSerial BT(10, 11);
+#define BT_RX 10
+#define BT_TX 11
 
 #define DHTPIN 8
 #define DHTTYPE DHT11
 
+#define NUM_RELAYS 3
+
+#define RELAY_ON LOW
+#define RELAY_OFF HIGH
+
+#define CMD_LCD_TOGGLE 3
+#define CMD_TEMP_STREAM 4
+#define CMD_DOOR_STREAM 5
+
+#define DIST_THRESHOLD 50
+#define SEND_INTERVAL 300
+#define DHT_INTERVAL 2000
+#define PIR_DEBOUNCE 200
+
+SoftwareSerial BT(BT_RX, BT_TX);
 DHT dht(DHTPIN, DHTTYPE);
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
-int numRelays = 3;
-bool relayState[3] = {false, false, false};
+bool relayState[NUM_RELAYS] = {false, false, false};
 
 bool lcdOn = false;
+bool doorStream = false;
+bool tempStream = false;
+
+String lcdCache[4];
+
+unsigned long lastSend = 0;
+unsigned long lastDHTRead = 0;
+unsigned long lastPIRTime = 0;
 
 int trigPin = 5;
 int echoPin = 7;
 int pirPin = 6;
 
-unsigned long lastSend = 0;
-
-bool doorStream = false;
-bool tempStream = false;
-
 String incomingBuffer = "";
+
+float lastTemp = 0;
+float lastHumidity = 0;
+bool pirState = false;
 
 void setup() {
   Serial.begin(9600);
@@ -36,9 +58,13 @@ void setup() {
   lcd.noBacklight();
   lcd.clear();
 
-  for (int i = 0; i < numRelays; i++) {
+  for (int i = 0; i < 4; i++) {
+    lcdCache[i] = "";
+  }
+
+  for (int i = 0; i < NUM_RELAYS; i++) {
     pinMode(i + 2, OUTPUT);
-    digitalWrite(i + 2, HIGH);
+    digitalWrite(i + 2, RELAY_OFF);
   }
 
   pinMode(trigPin, OUTPUT);
@@ -51,39 +77,44 @@ void loop() {
 
   unsigned long now = millis();
 
-  if (now - lastSend > 300) {
+  updatePIR(now);
+  updateDHT(now);
+
+  if (now - lastSend > SEND_INTERVAL) {
     lastSend = now;
+    handleDoor();
+    handleTemp();
+  }
+}
 
-    long distance = getCm();
-    bool motion = motionDetected();
+void handleDoor() {
+  long distance = getCm();
+  if (distance == -1) return;
 
-    // ---- DOOR ----
-    if (doorStream) {
-      String msg = "0;" + String(distance) + ";" + (motion ? "true" : "false");
-      BT.println(msg);
-    } else {
-      if (distance < 50 && motion) {
-        static int idx = 0;
-        int toSend = idx % 2;
-        idx++;
-        BT.println(toSend);
-      }
-    }
-
-    // ---- TEMP ----
-    if (tempStream) {
-      float temp = dht.readTemperature();
-      float humidity = dht.readHumidity();
-
-      if (!isnan(temp) && !isnan(humidity)) {
-        String msg = "1;" + String(temp) + ";" + String(humidity);
-        BT.println(msg);
-      }
+  if (doorStream) {
+    String msg = "0;";
+    msg += distance;
+    msg += ";";
+    msg += (pirState ? "true" : "false");
+    BT.println(msg);
+  } else {
+    if (distance < DIST_THRESHOLD && pirState) {
+      BT.println("DOOR_TRIGGERED");
     }
   }
 }
 
-// -------- HANDLE INCOMING --------
+void handleTemp() {
+  if (!tempStream) return;
+
+  String msg = "1;";
+  msg += lastTemp;
+  msg += ";";
+  msg += lastHumidity;
+
+  BT.println(msg);
+}
+
 void handleIncomingBT() {
   while (BT.available()) {
     char c = BT.read();
@@ -97,53 +128,51 @@ void handleIncomingBT() {
   }
 }
 
-// -------- PROCESS MESSAGE --------
 void processMessage(String msg) {
   msg.trim();
 
-  // ---- SINGLE CHAR COMMAND ----
   if (msg.length() == 1 && isDigit(msg[0])) {
     int val = msg[0] - '0';
 
-    Serial.println(val);
-
-    if (val == 3) {
+    if (val == CMD_LCD_TOGGLE) {
       lcdOn = !lcdOn;
-      if (lcdOn) lcd.backlight();
-      else lcd.noBacklight();
+      if (lcdOn) {
+        lcd.backlight();
+        refreshLCD();
+      } else {
+        lcd.noBacklight();
+      }
     }
-    else if (val == 4) {
+    else if (val == CMD_TEMP_STREAM) {
       tempStream = !tempStream;
     }
-    else if (val == 5) {
+    else if (val == CMD_DOOR_STREAM) {
       doorStream = !doorStream;
     }
-    else if (val < numRelays) {
+    else if (val < NUM_RELAYS) {
       relayState[val] = !relayState[val];
-      digitalWrite(val + 2, relayState[val] ? LOW : HIGH);
+      digitalWrite(val + 2, relayState[val] ? RELAY_ON : RELAY_OFF);
     }
 
     return;
   }
 
-  // ---- STRUCTURED LCD MESSAGE ----
-  int firstSep = msg.indexOf(';');
-  int secondSep = msg.indexOf(';', firstSep + 1);
-  int thirdSep = msg.indexOf(';', secondSep + 1);
+  int first = msg.indexOf(';');
+  int second = msg.indexOf(';', first + 1);
+  int third = msg.indexOf(';', second + 1);
 
-  if (firstSep == -1 || secondSep == -1 || thirdSep == -1) return;
+  if (first == -1 || second == -1 || third == -1) return;
 
-  int row1 = msg.substring(0, firstSep).toInt();
-  String data1 = msg.substring(firstSep + 1, secondSep);
+  int row1 = msg.substring(0, first).toInt();
+  String data1 = msg.substring(first + 1, second);
 
-  int row2 = msg.substring(secondSep + 1, thirdSep).toInt();
-  String data2 = msg.substring(thirdSep + 1);
+  int row2 = msg.substring(second + 1, third).toInt();
+  String data2 = msg.substring(third + 1);
 
   displayASCII(row1, data1);
   displayASCII(row2, data2);
 }
 
-// -------- ASCII DISPLAY --------
 void displayASCII(int row, String asciiData) {
   if (!lcdOn) return;
   if (row > 1) return;
@@ -163,21 +192,53 @@ void displayASCII(int row, String asciiData) {
       numStr = asciiData.substring(start, underscore);
     }
 
-    char c = (char) numStr.toInt();
-    text += c;
+    if (numStr.length() > 0) {
+      char c = (char) numStr.toInt();
+      text += c;
+    }
 
     if (underscore == -1) break;
     start = underscore + 1;
   }
 
-  lcd.print("                    "); // 20 spaces
+  lcdCache[row] = text;
+
+  lcd.print("                    ");
   lcd.setCursor(0, row);
   lcd.print(text);
 }
 
-// -------- SENSORS --------
-bool motionDetected() {
-  return digitalRead(pirPin) == HIGH;
+void refreshLCD() {
+  lcd.clear();
+  for (int i = 0; i < 4; i++) {
+    lcd.setCursor(0, i);
+    lcd.print(lcdCache[i]);
+  }
+}
+
+void updatePIR(unsigned long now) {
+  bool current = digitalRead(pirPin);
+
+  if (current && (now - lastPIRTime > PIR_DEBOUNCE)) {
+    pirState = true;
+    lastPIRTime = now;
+  } else if (!current) {
+    pirState = false;
+  }
+}
+
+void updateDHT(unsigned long now) {
+  if (now - lastDHTRead < DHT_INTERVAL) return;
+
+  lastDHTRead = now;
+
+  float t = dht.readTemperature();
+  float h = dht.readHumidity();
+
+  if (!isnan(t) && !isnan(h)) {
+    lastTemp = t;
+    lastHumidity = h;
+  }
 }
 
 long getCm() {
@@ -188,6 +249,9 @@ long getCm() {
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  long duration = pulseIn(echoPin, HIGH, 30000);
+  long duration = pulseIn(echoPin, HIGH, 20000);
+
+  if (duration == 0) return -1;
+
   return duration * 0.034 / 2;
 }
